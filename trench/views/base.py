@@ -34,6 +34,7 @@ from trench.serializers import (
     MFAMethodActivationConfirmationValidator,
     MFAMethodBackupCodesGenerationValidator,
     MFAMethodCodeSerializer,
+    MFAMethodFallbackCodeSerializer,
     MFAMethodDeactivationValidator,
     UserMFAMethodSerializer,
     generate_model_serializer,
@@ -88,6 +89,36 @@ class MFASecondStepMixin(MFAStepMixin, ABC):
             return self._successful_authentication_response(user=user)
         except MFAValidationError as cause:
             return ErrorResponse(error=cause, status=HTTP_401_UNAUTHORIZED)
+
+
+class MFASecondStepRequestCodeFallbackView(APIView):
+    permission_classes = (AllowAny,)
+
+    @staticmethod
+    def post(request: Request) -> Response:
+        serializer = MFAMethodFallbackCodeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            method = serializer.validated_data.get("method")
+            ephemeral_token = serializer.validated_data.get("ephemeral_token")
+            proposed_user = user_token_generator.check_token(None, ephemeral_token)
+
+            mfa_model = get_mfa_model()
+
+            if proposed_user is None:
+                return ErrorResponse(error="HTTP_401_UNAUTHORIZED", status=HTTP_401_UNAUTHORIZED)
+
+            if method is None:
+                method = mfa_model.objects.get_primary_active_name(
+                    user_id=proposed_user.id
+                )
+            mfa = mfa_model.objects.get_by_name(user_id=proposed_user.id, name=method)
+            if mfa.name in trench_settings.MFA_METHODS and trench_settings.MFA_METHODS[mfa.name].get("ALLOW_CODE_REQUEST_FALLBACK", False):
+                return get_mfa_handler(mfa_method=mfa).dispatch_message()
+            else:
+                return ErrorResponse(error="HTTP_401_UNAUTHORIZED", status=HTTP_401_UNAUTHORIZED)
+        except MFAValidationError as cause:
+            return ErrorResponse(error=cause)
 
 
 class MFAMethodActivationView(APIView):

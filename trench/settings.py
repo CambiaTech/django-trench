@@ -52,6 +52,7 @@ SMSAPI_ACCESS_TOKEN = "SMSAPI_ACCESS_TOKEN"
 SMSAPI_FROM_NUMBER = "SMSAPI_FROM_NUMBER"
 TWILIO_VERIFIED_FROM_NUMBER = "TWILIO_VERIFIED_FROM_NUMBER"
 YUBICLOUD_CLIENT_ID = "YUBICLOUD_CLIENT_ID"
+ALLOW_CODE_REQUEST_FALLBACK = "ALLOW_CODE_REQUEST_FALLBACK"
 
 DEFAULTS = {
     "USER_MFA_MODEL": "trench.MFAMethod",
@@ -90,6 +91,7 @@ DEFAULTS = {
             EMAIL_SUBJECT: _("Your verification code"),
             EMAIL_PLAIN_TEMPLATE: "trench/backends/email/code.txt",
             EMAIL_HTML_TEMPLATE: "trench/backends/email/code.html",
+            ALLOW_CODE_REQUEST_FALLBACK: True
         },
         "app": {
             VERBOSE_NAME: _("app"),
