@@ -12,6 +12,7 @@ from trench.settings import SOURCE_FIELD, VALIDITY_PERIOD, trench_settings
 
 
 class AbstractMessageDispatcher(ABC):
+
     def __init__(self, mfa_method: MFAMethod, config: Dict[str, Any]) -> None:
         self._mfa_method = mfa_method
         self._config = config
@@ -19,13 +20,11 @@ class AbstractMessageDispatcher(ABC):
 
     def _get_source_field(self) -> Optional[str]:
         if SOURCE_FIELD in self._config:
-            source = self._get_nested_attr_value(
-                self._mfa_method.user, self._config[SOURCE_FIELD]
-            )
+            source = self._get_nested_attr_value(self._mfa_method.user,
+                                                 self._config[SOURCE_FIELD])
             if source is None:
                 raise MissingConfigurationError(
-                    attribute_name=self._config[SOURCE_FIELD]
-                )
+                    attribute_name=self._config[SOURCE_FIELD])
             return source
         return None
 
@@ -60,7 +59,7 @@ class AbstractMessageDispatcher(ABC):
         return obj  # pragma: no cover
 
     @abstractmethod
-    def dispatch_message(self) -> DispatchResponse:
+    def dispatch_message(self, request=None) -> DispatchResponse:
         raise NotImplementedError  # pragma: no cover
 
     def create_code(self) -> str:
@@ -76,9 +75,9 @@ class AbstractMessageDispatcher(ABC):
         return self._get_otp().verify(otp=code)
 
     def _get_otp(self) -> TOTP:
-        return create_otp_command(secret=self._mfa_method.secret, interval=self._get_valid_window())
+        return create_otp_command(secret=self._mfa_method.secret,
+                                  interval=self._get_valid_window())
 
     def _get_valid_window(self) -> int:
-        return self._config.get(
-            VALIDITY_PERIOD, trench_settings.DEFAULT_VALIDITY_PERIOD
-        )
+        return self._config.get(VALIDITY_PERIOD,
+                                trench_settings.DEFAULT_VALIDITY_PERIOD)

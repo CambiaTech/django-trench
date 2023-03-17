@@ -19,7 +19,7 @@ class SendMailMessageDispatcher(AbstractMessageDispatcher):
     _KEY_MESSAGE = "message"
     _SUCCESS_DETAILS = _("Email message with MFA code has been sent.")
 
-    def dispatch_message(self) -> DispatchResponse:
+    def dispatch_message(self, request=None) -> DispatchResponse:
         context = {"code": self.create_code()}
         email_plain_template = self._config[EMAIL_PLAIN_TEMPLATE]
         email_html_template = self._config[EMAIL_HTML_TEMPLATE]
@@ -29,10 +29,11 @@ class SendMailMessageDispatcher(AbstractMessageDispatcher):
                 message=get_template(email_plain_template).render(context),
                 html_message=get_template(email_html_template).render(context),
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=(self._to,),
+                recipient_list=(self._to, ),
                 fail_silently=False,
             )
             return SuccessfulDispatchResponse(details=self._SUCCESS_DETAILS)
         except SMTPException as cause:  # pragma: nocover
             logging.error(cause, exc_info=True)  # pragma: nocover
-            return FailedDispatchResponse(details=str(cause))  # pragma: nocover
+            return FailedDispatchResponse(
+                details=str(cause))  # pragma: nocover

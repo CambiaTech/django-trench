@@ -21,8 +21,7 @@ from trench.command.authenticate_user import authenticate_user_command
 from trench.command.create_mfa_method import create_mfa_method_command
 from trench.command.deactivate_mfa_method import deactivate_mfa_method_command
 from trench.command.replace_mfa_method_backup_codes import (
-    regenerate_backup_codes_for_mfa_method_command,
-)
+    regenerate_backup_codes_for_mfa_method_command, )
 from trench.command.set_primary_mfa_method import set_primary_mfa_method_command
 from trench.exceptions import MFAMethodDoesNotExistError, MFAValidationError
 from trench.query.get_mfa_config_by_name import get_mfa_config_by_name_query
@@ -44,7 +43,7 @@ from trench.utils import available_method_choices, get_mfa_model, user_token_gen
 
 
 class MFAStepMixin(APIView, ABC):
-    permission_classes = (AllowAny,)
+    permission_classes = (AllowAny, )
 
     @abstractmethod
     def _successful_authentication_response(self, user: User) -> Response:
@@ -52,6 +51,7 @@ class MFAStepMixin(APIView, ABC):
 
 
 class MFAFirstStepMixin(MFAStepMixin, ABC):
+
     def post(self, request: Request) -> Response:
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -66,18 +66,19 @@ class MFAFirstStepMixin(MFAStepMixin, ABC):
         try:
             mfa_model = get_mfa_model()
             mfa_method = mfa_model.objects.get_primary_active(user_id=user.id)
-            get_mfa_handler(mfa_method=mfa_method).dispatch_message()
+            get_mfa_handler(mfa_method=mfa_method).dispatch_message(
+                request=request)
             return Response(
                 data={
                     "ephemeral_token": user_token_generator.make_token(user),
                     "method": mfa_method.name,
-                }
-            )
+                })
         except MFAMethodDoesNotExistError:
             return self._successful_authentication_response(user=user)
 
 
 class MFASecondStepMixin(MFAStepMixin, ABC):
+
     def post(self, request: Request) -> Response:
         serializer = CodeLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -92,7 +93,7 @@ class MFASecondStepMixin(MFAStepMixin, ABC):
 
 
 class MFASecondStepRequestCodeFallbackView(APIView):
-    permission_classes = (AllowAny,)
+    permission_classes = (AllowAny, )
 
     @staticmethod
     def post(request: Request) -> Response:
@@ -101,40 +102,46 @@ class MFASecondStepRequestCodeFallbackView(APIView):
         try:
             method = serializer.validated_data.get("method")
             ephemeral_token = serializer.validated_data.get("ephemeral_token")
-            proposed_user = user_token_generator.check_token(None, ephemeral_token)
+            proposed_user = user_token_generator.check_token(
+                None, ephemeral_token)
 
             mfa_model = get_mfa_model()
 
             if proposed_user is None:
-                return ErrorResponse(error="HTTP_401_UNAUTHORIZED", status=HTTP_401_UNAUTHORIZED)
+                return ErrorResponse(error="HTTP_401_UNAUTHORIZED",
+                                     status=HTTP_401_UNAUTHORIZED)
 
             if method is None:
                 method = mfa_model.objects.get_primary_active_name(
-                    user_id=proposed_user.id
-                )
-            mfa = mfa_model.objects.get_by_name(user_id=proposed_user.id, name=method)
-            if mfa.name in trench_settings.MFA_METHODS and trench_settings.MFA_METHODS[mfa.name].get("ALLOW_CODE_REQUEST_FALLBACK", False):
-                return get_mfa_handler(mfa_method=mfa).dispatch_message()
+                    user_id=proposed_user.id)
+            mfa = mfa_model.objects.get_by_name(user_id=proposed_user.id,
+                                                name=method)
+            if mfa.name in trench_settings.MFA_METHODS and trench_settings.MFA_METHODS[
+                    mfa.name].get("ALLOW_CODE_REQUEST_FALLBACK", False):
+                return get_mfa_handler(mfa_method=mfa).dispatch_message(
+                    request=request)
             else:
-                return ErrorResponse(error="HTTP_401_UNAUTHORIZED", status=HTTP_401_UNAUTHORIZED)
+                return ErrorResponse(error="HTTP_401_UNAUTHORIZED",
+                                     status=HTTP_401_UNAUTHORIZED)
         except MFAValidationError as cause:
             return ErrorResponse(error=cause)
 
 
 class MFAMethodActivationView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, )
 
     @staticmethod
     def post(request: Request, method: str) -> Response:
         try:
-            source_field = get_mfa_config_by_name_query(name=method).get(SOURCE_FIELD)
+            source_field = get_mfa_config_by_name_query(
+                name=method).get(SOURCE_FIELD)
         except MFAMethodDoesNotExistError as cause:
             return ErrorResponse(error=cause)
         if source_field is not None:
             serializer_class = generate_model_serializer(
                 name="MFAMethodActivationValidator",
                 model=request.user.__class__,
-                fields=(source_field,),
+                fields=(source_field, ),
             )
             serializer = serializer_class(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -145,19 +152,20 @@ class MFAMethodActivationView(APIView):
             )
         except MFAValidationError as cause:
             return ErrorResponse(error=cause)
-        return get_mfa_handler(mfa_method=mfa).dispatch_message()
+        return get_mfa_handler(mfa_method=mfa).dispatch_message(
+            request=request)
 
 
 class MFAMethodConfirmActivationView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, )
 
     @staticmethod
     def post(request: Request, method: str) -> Response:
         serializer = MFAMethodActivationConfirmationValidator(
-            mfa_method_name=method, user=request.user, data=request.data
-        )
+            mfa_method_name=method, user=request.user, data=request.data)
         if not serializer.is_valid():
-            return Response(status=HTTP_400_BAD_REQUEST, data=serializer.errors)
+            return Response(status=HTTP_400_BAD_REQUEST,
+                            data=serializer.errors)
         try:
             backup_codes = activate_mfa_method_command(
                 user_id=request.user.id,
@@ -170,36 +178,37 @@ class MFAMethodConfirmActivationView(APIView):
 
 
 class MFAMethodDeactivationView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, )
 
     @staticmethod
     def post(request: Request, method: str) -> Response:
-        serializer = MFAMethodDeactivationValidator(
-            mfa_method_name=method, user=request.user, data=request.data
-        )
+        serializer = MFAMethodDeactivationValidator(mfa_method_name=method,
+                                                    user=request.user,
+                                                    data=request.data)
         if not serializer.is_valid():
-            return Response(status=HTTP_400_BAD_REQUEST, data=serializer.errors)
+            return Response(status=HTTP_400_BAD_REQUEST,
+                            data=serializer.errors)
         try:
-            deactivate_mfa_method_command(
-                mfa_method_name=method, user_id=request.user.id
-            )
+            deactivate_mfa_method_command(mfa_method_name=method,
+                                          user_id=request.user.id)
             return Response(status=HTTP_204_NO_CONTENT)
         except MFAValidationError as cause:
             return ErrorResponse(error=cause)
 
 
 class MFAMethodBackupCodesRegenerationView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, )
 
     @staticmethod
     def post(request: Request, method: str) -> Response:
         if not trench_settings.ALLOW_BACKUP_CODES_REGENERATION:
-            return ErrorResponse(error=_("Backup codes regeneration is not allowed."))
+            return ErrorResponse(
+                error=_("Backup codes regeneration is not allowed."))
         serializer = MFAMethodBackupCodesGenerationValidator(
-            mfa_method_name=method, user=request.user, data=request.data
-        )
+            mfa_method_name=method, user=request.user, data=request.data)
         if not serializer.is_valid():
-            return Response(status=HTTP_400_BAD_REQUEST, data=serializer.errors)
+            return Response(status=HTTP_400_BAD_REQUEST,
+                            data=serializer.errors)
         try:
             backup_codes = regenerate_backup_codes_for_mfa_method_command(
                 user_id=request.user.id,
@@ -211,26 +220,29 @@ class MFAMethodBackupCodesRegenerationView(APIView):
 
 
 class MFAConfigView(APIView):
-    permission_classes = (AllowAny,)
+    permission_classes = (AllowAny, )
 
     @staticmethod
     def get(request: Request) -> Response:
         return Response(
             data={
                 "methods": [
-                    method_name
-                    for method_name, method_verbose_name in available_method_choices()
+                    method_name for method_name, method_verbose_name in
+                    available_method_choices()
                 ],
-                "confirm_disable_with_code": trench_settings.CONFIRM_DISABLE_WITH_CODE,  # noqa
-                "confirm_regeneration_with_code": trench_settings.CONFIRM_BACKUP_CODES_REGENERATION_WITH_CODE,  # noqa
-                "allow_backup_codes_regeneration": trench_settings.ALLOW_BACKUP_CODES_REGENERATION,  # noqa
-            },
-        )
+                "confirm_disable_with_code":
+                trench_settings.CONFIRM_DISABLE_WITH_CODE,  # noqa
+                "confirm_regeneration_with_code":
+                trench_settings.
+                CONFIRM_BACKUP_CODES_REGENERATION_WITH_CODE,  # noqa
+                "allow_backup_codes_regeneration":
+                trench_settings.ALLOW_BACKUP_CODES_REGENERATION,  # noqa
+            }, )
 
 
 class MFAListActiveUserMethodsView(ListAPIView):
     serializer_class = UserMFAMethodSerializer
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, )
 
     def get_queryset(self) -> QuerySet:
         mfa_model = get_mfa_model()
@@ -238,7 +250,7 @@ class MFAListActiveUserMethodsView(ListAPIView):
 
 
 class MFAMethodRequestCodeView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, )
 
     @staticmethod
     def post(request: Request) -> Response:
@@ -249,31 +261,32 @@ class MFAMethodRequestCodeView(APIView):
             mfa_model = get_mfa_model()
             if method is None:
                 method = mfa_model.objects.get_primary_active_name(
-                    user_id=request.user.id
-                )
-            mfa = mfa_model.objects.get_by_name(user_id=request.user.id, name=method)
-            return get_mfa_handler(mfa_method=mfa).dispatch_message()
+                    user_id=request.user.id)
+            mfa = mfa_model.objects.get_by_name(user_id=request.user.id,
+                                                name=method)
+            return get_mfa_handler(mfa_method=mfa).dispatch_message(
+                request=request)
         except MFAValidationError as cause:
             return ErrorResponse(error=cause)
 
 
 class MFAPrimaryMethodChangeView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, )
 
     @staticmethod
     def post(request: Request) -> Response:
         mfa_model = get_mfa_model()
         mfa_method_name = mfa_model.objects.get_primary_active_name(
-            user_id=request.user.id
-        )
+            user_id=request.user.id)
         serializer = ChangePrimaryMethodValidator(
-            user=request.user, mfa_method_name=mfa_method_name, data=request.data
-        )
+            user=request.user,
+            mfa_method_name=mfa_method_name,
+            data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
             set_primary_mfa_method_command(
-                user_id=request.user.id, name=serializer.validated_data["method"]
-            )
+                user_id=request.user.id,
+                name=serializer.validated_data["method"])
             return Response(status=HTTP_204_NO_CONTENT)
         except MFAValidationError as cause:
             return ErrorResponse(error=cause)
